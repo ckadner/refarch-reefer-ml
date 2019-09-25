@@ -1,0 +1,11 @@
+# we rely on requirements from client and server for local development
+
+-r simulator/requirements.txt
+-r scoring/eventConsumer/requirements.txt
+-r scoring/webapp/requirements.txt
+-r consumer/requirements.txt
+
+-e simulator
+-e scoring/eventConsumer
+-e scoring/webapp
+-e consumer

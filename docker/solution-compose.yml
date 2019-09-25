@@ -20,6 +20,7 @@ services:
         image: ibmcase/predictivescoring:latest
         hostname: scoring
         environment:
+            SCORING_URL: http://169.45.69.227:31380/predict
             KAFKA_ENV: LOCAL
             KAFKA_BROKERS: kafka1:9092
             KAFKA_APIKEY: ""

@@ -1,6 +1,13 @@
 from confluent_kafka import Producer 
 import json
 import infrastructure.EventBackboneConfiguration as EventBackboneConfiguration
+import logging
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.StreamHandler())
+log.addHandler(logging.FileHandler("/var/log/app.log"))
+log.setLevel(logging.INFO)
+
 
 class ContainerEventsProducer:
 
@@ -24,16 +31,16 @@ class ContainerEventsProducer:
             options['sasl.password'] = self.apikey
         if (self.currentRuntime == 'ICP'):
             options['ssl.ca.location'] = 'es-cert.pem'
-        print(options)
+        log.info(options)
         self.producer = Producer(options)
 
     def delivery_report(self,err, msg):
         """ Called once for each message produced to indicate delivery result.
             Triggered by poll() or flush(). """
         if err is not None:
-            print('Message delivery failed: {}'.format(err))
+            log.error('Message delivery failed: {}'.format(err))
         else:
-            print('Message delivered to {} [{}]'.format(msg.topic(), msg.partition()))
+            log.info('Message delivered to {} [{}]'.format(msg.topic(), msg.partition()))
 
     def publishEvent(self, eventToSend, keyName):
         dataStr = json.dumps(eventToSend)

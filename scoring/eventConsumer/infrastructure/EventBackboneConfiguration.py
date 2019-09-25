@@ -1,27 +1,40 @@
-import os, sys
+import logging
+from os import environ as env
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.StreamHandler())
+log.addHandler(logging.FileHandler("/var/log/app.log"))
+log.setLevel(logging.INFO)
 
 try:
-    KAFKA_BROKERS = os.environ['KAFKA_BROKERS']
+    KAFKA_BROKERS = env['KAFKA_BROKERS']
 except KeyError:
-    print("The KAFKA_BROKERS environment variable needs to be set.")
-    exit
+    log.error("The KAFKA_BROKERS environment variable needs to be set.")
+    # exit
+
+if not KAFKA_BROKERS:
+    KAFKA_BROKERS = "my-cluster-kafka-bootstrap.kubeflow:9092"
+    log.warning(f"default the KAFKA_BROKERS to {KAFKA_BROKERS}.")
 
 try:
-    KAFKA_APIKEY = os.environ['KAFKA_APIKEY']
+    KAFKA_APIKEY = env['KAFKA_APIKEY']
 except KeyError:
-    print("The KAFKA_APIKEY environment variable not set... assume local deployment")
+    KAFKA_APIKEY = ""
+    log.warning("The KAFKA_APIKEY environment variable not set... assume local deployment")
 
 try:
-    KAFKA_ENV = os.environ['KAFKA_ENV']
+    KAFKA_ENV = env['KAFKA_ENV']
 except KeyError:
-    KAFKA_ENV='LOCAL'
+    KAFKA_ENV = 'LOCAL'
 
 
 def getBrokerEndPoints():
     return KAFKA_BROKERS
 
+
 def getEndPointAPIKey():
     return KAFKA_APIKEY
+
 
 def getCurrentRuntimeEnvironment():
     return KAFKA_ENV
