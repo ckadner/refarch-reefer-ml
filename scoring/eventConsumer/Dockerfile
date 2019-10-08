@@ -15,6 +15,8 @@ RUN pip install --trusted-host pypi.python.org -r requirements.txt
 ENV KAFKA_BROKERS my-cluster-kafka-bootstrap.kubeflow:9092
 ENV KAFKA_ENV LOCAL
 ENV KAFKA_API ""
+ENV KFSERVICE_URL istio-ingressgateway.istio-system:80
+ENV MODEL_SERVING_METADATA ""
 
 # make sure we get logs streamed right away
 ENV PYTHONUNBUFFERED 0

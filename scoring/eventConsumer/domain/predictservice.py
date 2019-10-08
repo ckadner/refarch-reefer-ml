@@ -4,7 +4,12 @@ import logging
 import pickle
 import pandas as pd
 import requests
-import sys, os
+import sys
+import os
+
+from os import environ as env
+from pprint import pprint
+
 if sys.version_info[0] < 3: 
     from StringIO import StringIO
 else:
@@ -16,32 +21,48 @@ log.addHandler(logging.FileHandler("/var/log/app.log"))
 log.setLevel(logging.INFO)
 
 
-# this is use in case we want to have the model running on a remote server instead of using 
-# the one embedded. 
-try:
-    SCORING_URL = os.environ['SCORING_URL']
-    if not SCORING_URL.strip("/").endswith("/predict"):
-        # TODO: use regex to get the URL right
-        SCORING_URL = SCORING_URL.strip("/") + "/predict"
-except KeyError:
-    SCORING_URL=''  # be sure to keep it empty
-    # TODO: undo this
-    log.warning("no scoring URL provided, default to Tommy's first deployment")
-    SCORING_URL = "http://169.45.69.227:31380/predict"
+# defaults, may not make sense here, TODO: clean up
+model_name = 'maintenance-model'
+model_deploy_namespace = 'model-deploy'
+knative_custom_domain = 'example.com'
 
-log.info(f"scoring_url: {SCORING_URL}")
+knative_domain_host = f"{model_name}.{model_deploy_namespace}.{knative_custom_domain}"
+
+model_serving_metadata = env.get("MODEL_SERVING_METADATA")
+
+if not model_serving_metadata:
+    log.error("Environment variable 'MODEL_SERVING_METADATA' is not set.")
+else:
+    try:
+        meta = json.loads(model_serving_metadata)
+
+        if meta.get("status") and meta["status"].get("url"):
+            knative_domain_host = meta["status"]["url"].lstrip("http://")
+        else:
+            model_name = meta["metadata"]["name"]
+            model_deploy_namespace = meta["metadata"]["namespace"]
+            knative_domain_host = f"{model_name}.{model_deploy_namespace}"
+
+        log.info(f"knative_domain_host: '{knative_domain_host}'")
+
+    except Exception as e:
+        log.exception(f"Error trying to parse env variable 'MODEL_SERVING_METADATA': {model_serving_metadata}",
+                      exc_info=True)
 
 
-# TODO: get `Host` from the pipeline outputs of the deployment task:
-#   model_name='maintainance-model'
-#   model_deploy_namespace='model-deploy'
-#   knative_custom_domain = 'example.com'
-HOST = os.environ.get("HOST", 'maintainance-model.model-deploy.example.com')
-
-HEADERS = {
-    'Host': HOST,
+request_headers = {
+    'Host': knative_domain_host,
     'Content-Type': 'application/json'
 }
+
+# this is use in case we want to have the model running on a remote server instead of using 
+# the one embedded. 
+
+kfservice_url = env.get('KFSERVICE_URL', "istio-ingressgateway.istio-system:80")
+log.info(f"kfservice_url: {kfservice_url}")
+
+scoring_url = f"http://{kfservice_url}/predict"
+log.info(f"scoring_url: {scoring_url}")
 
 
 class PredictService:
@@ -64,7 +85,7 @@ class PredictService:
         data.columns = data.columns.to_series().apply(lambda x: x.strip())
         X = data[feature_cols]
         # Return 1 if maintenance is required, 0 otherwise
-        if SCORING_URL != '':
+        if scoring_url != '':
             column_name_mapping = {
                 '': '',
                 'Timestamp': 'timestamp',
@@ -81,9 +102,9 @@ class PredictService:
                 'Defrost_Cycle': 'defrost_level'
             }
             payload = X.rename(columns=column_name_mapping).to_dict('records')[0]
-            log.info(f"POST: {SCORING_URL}")
+            log.info(f"POST: {scoring_url}")
             log.info(json.dumps(payload))
-            response = requests.post(url=SCORING_URL, data=json.dumps(payload), headers=HEADERS)
+            response = requests.post(url=scoring_url, data=json.dumps(payload), headers=request_headers)
             log.info(response.text)
             score = ast.literal_eval(response.text)[0]  # response text is a string representation of an ndarray: '[1]'
             return score

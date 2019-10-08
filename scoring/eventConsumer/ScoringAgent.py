@@ -87,7 +87,7 @@ if __name__ == "__main__":
     '''
     Just start the event listener
     '''
-    version = "v0.0.5"
+    version = "v0.0.7"
     slack_me(f"Deployed Reefer Scoring Agent {version} on {env.get('HOSTNAME')}")
     log.info(f"Reefer Container Predictive Maintenance Scoring Agent {version}")
     metricsEventListener = startReeferMetricsEventListener()
