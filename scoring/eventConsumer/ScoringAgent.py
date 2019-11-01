@@ -30,7 +30,7 @@ def assessPredictiveMaintenance(msg):
     Argument the message as dict / json format to preocess.
     In the case of maintenance needed, generate an event to the containers topic
     '''
-    header="""Timestamp, ID, Temperature(celsius), Target_Temperature(celsius), Power, PowerConsumption, ContentType, O2, CO2, Time_Door_Open, Maintenance_Required, Defrost_Cycle"""
+    header = """container_id, timestamp, product_id, temperature, target_temperature, ambiant_temperature, kilowatts, time_door_open, content_type, defrost_cycle, oxygen_level, nitrogen_level, humidity_level, carbon_dioxide_level, vent_1, vent_2, vent_3, maintenance_required"""
 
     log.info(msg['payload'])
     score = 0
@@ -42,6 +42,7 @@ def assessPredictiveMaintenance(msg):
     if score == 1:
         log.info("Go to maintenance " + msg['containerID'])
         # TODO do not send a maintenance event if already done in the current travel.
+        # This will lead to a stateful agent...
         tstamp = int(time.time())
         data = {"timestamp": tstamp,
                 "type": "ContainerMaintenance",
@@ -51,7 +52,7 @@ def assessPredictiveMaintenance(msg):
                     "containerID":  msg['containerID'],
                     "type": "Reefer",
                     "status": "MaintenanceNeeded",
-                    "Reason": "Predictive maintenance scoring found a risk of failure", }
+                    "Reason": "Predictive maintenance scoring found a risk of failure",}
                 }
         containerEventsProducer.publishEvent(data,"containerID")
     
@@ -60,11 +61,11 @@ def assessDataAreValid(metricStr):
     try:
         metric = eval(metricStr)
     except json.decoder.JSONDecodeError:
+        log.error(f"Unable to decode metricStr: {metricStr}")
         return False
     try:
         for i in range(0,9):
-            float(metric[2 + i])
-            
+            float(metric[3 + i])
     except TypeError or ValueError:
         return False
     return True
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     '''
     Just start the event listener
     '''
-    version = "v0.0.7"
+    version = "v0.0.9"
     slack_me(f"Deployed Reefer Scoring Agent {version} on {env.get('HOSTNAME')}")
     log.info(f"Reefer Container Predictive Maintenance Scoring Agent {version}")
     metricsEventListener = startReeferMetricsEventListener()

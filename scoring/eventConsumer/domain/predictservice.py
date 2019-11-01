@@ -22,7 +22,7 @@ log.setLevel(logging.INFO)
 
 
 # defaults, may not make sense here, TODO: clean up
-model_name = 'maintenance-model'
+model_name = 'maintenance-model-pg'
 model_deploy_namespace = 'model-deploy'
 knative_custom_domain = 'example.com'
 
@@ -43,12 +43,11 @@ else:
             model_deploy_namespace = meta["metadata"]["namespace"]
             knative_domain_host = f"{model_name}.{model_deploy_namespace}"
 
-        log.info(f"knative_domain_host: '{knative_domain_host}'")
-
     except Exception as e:
         log.exception(f"Error trying to parse env variable 'MODEL_SERVING_METADATA': {model_serving_metadata}",
                       exc_info=True)
 
+log.info(f"knative_domain_host: '{knative_domain_host}'")
 
 request_headers = {
     'Host': knative_domain_host,
@@ -65,47 +64,76 @@ scoring_url = f"http://{kfservice_url}/predict"
 log.info(f"scoring_url: {scoring_url}")
 
 
+# Attention it will be tempting to use the column names defined in the simulator, but in reality
+# those two codes are unrelated, and the definition comes from the data... Each services are coded
+# by different teams and they know about the data not the code. 
+FEATURES_NAMES = [
+    "temperature", "target_temperature", "ambiant_temperature",
+    "kilowatts", "time_door_open",
+    "content_type", "defrost_cycle",
+    "oxygen_level", "nitrogen_level", "humidity_level", "carbon_dioxide_level",
+    "vent_1", "vent_2", "vent_3"]
+
+# simulator_COLUMN_NAMES = ["container_id", "measurement_time", "product_id",
+#                 "temperature", "target_temperature", "ambiant_temperature",
+#                 "kilowatts", "time_door_open",
+#                 "content_type", "defrost_cycle",
+#                 "oxygen_level", "nitrogen_level", "humidity_level", "carbon_dioxide_level",
+#                 "vent_1", "vent_2", "vent_3", "maintenance_required"]
+
 class PredictService:
     '''
     Wrapper interface in front of the ML trained model
     '''
     def __init__(self,filename = "domain/model_logistic_regression.pkl"):
         self.model = pickle.load(open(filename,"rb"),encoding='latin1')
-
+    
     def predict(self, metricEvent):
         """
         Predict the maintenance from the telemetry event received. The telemetry is a string of comma separated values.
         See the feature column names and order below.
         return 0 if no maintenance is needed, 1 otherwise
         """
-        feature_cols = ['Temperature(celsius)','Target_Temperature(celsius)','Power','PowerConsumption','ContentType','O2','CO2','Time_Door_Open','Maintenance_Required','Defrost_Cycle']
-        # Do some simple data transformation and reading to build X
+        # Do some simple data transformation to build X
         TESTDATA = StringIO(metricEvent)
         data = pd.read_csv(TESTDATA, sep=",")
         data.columns = data.columns.to_series().apply(lambda x: x.strip())
-        X = data[feature_cols]
+        X = data[FEATURES_NAMES]
+        # print(X)
         # Return 1 if maintenance is required, 0 otherwise
         if scoring_url != '':
-            column_name_mapping = {
-                '': '',
-                'Timestamp': 'timestamp',
-                'ID': 'containerID',
-                'Temperature(celsius)': 'temperature',
-                'Target_Temperature(celsius)': 'target_temp',
-                'Power': 'power',
-                'PowerConsumption': 'accumulated_power',
-                'ContentType': 'content_type',
-                'O2': 'o2',
-                'CO2': 'co2',
-                'Time_Door_Open': 'time_door_open',
-                'Maintenance_Required': 'maintenance_required',
-                'Defrost_Cycle': 'defrost_level'
-            }
-            payload = X.rename(columns=column_name_mapping).to_dict('records')[0]
-            log.info(f"POST: {scoring_url}")
-            log.info(json.dumps(payload))
+            # webapp_feature_cols = [
+            #     'temperature', 'target_temperature', 'ambiant_temperature',
+            #     'oxygen_level', 'carbon_dioxide_level', 'humidity_level', 'nitrogen_level',
+            #     'vent_1', 'vent_2', 'vent_3',
+            #     'kilowatts', 'content_type', 'time_door_open', 'defrost_cycle'
+            # ]
+            # column_name_mapping = {
+            #     '': '',
+            #     'Timestamp': 'timestamp',
+            #     'ID': 'containerID',
+            #     'Temperature(celsius)': 'temperature',
+            #     'Target_Temperature(celsius)': 'target_temp',
+            #     'Power': 'power',
+            #     'PowerConsumption': 'accumulated_power',
+            #     'ContentType': 'content_type',
+            #     'O2': 'o2',
+            #     'CO2': 'co2',
+            #     'Time_Door_Open': 'time_door_open',
+            #     'Maintenance_Required': 'maintenance_required',
+            #     'Defrost_Cycle': 'defrost_level'
+            # }
+            # payload = X.rename(columns=column_name_mapping).to_dict('records')[0]
+            payload = X.to_dict('records')[0]
+
+            # strip spaces from values like " True"
+            for k, v in payload.items():
+                if type(v) == str:
+                    payload[k] = v.strip()
+
+            log.info(f"POST {scoring_url}: {json.dumps(payload)}")
             response = requests.post(url=scoring_url, data=json.dumps(payload), headers=request_headers)
-            log.info(response.text)
+            log.info(f"RESPONSE: {response.text}")
             score = ast.literal_eval(response.text)[0]  # response text is a string representation of an ndarray: '[1]'
             return score
         else:

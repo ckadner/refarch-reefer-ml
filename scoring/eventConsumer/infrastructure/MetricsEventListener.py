@@ -15,36 +15,33 @@ log.setLevel(logging.INFO)
 class MetricsEventListener:
 
     def __init__(self):
-        self.currentRuntime = EventBackboneConfiguration.getCurrentRuntimeEnvironment()
-        self.brokers = EventBackboneConfiguration.getBrokerEndPoints()
-        self.apikey = EventBackboneConfiguration.getEndPointAPIKey()
-        self.topic_name = "containerMetrics"
         self.kafka_auto_commit = True
-        self.prepareConsumer(group_id=datetime.now().strftime('group-%Y%m%d-%H%M%S'))
+        # self.prepareConsumer(group_id=datetime.now().strftime('group-%Y%m%d-%H%M%S'))
+        self.prepareConsumer(group_id="reefermetricsconsumer")
 
     # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
     def prepareConsumer(self, group_id="reefermetricsconsumer"):
-        options = {
-            'bootstrap.servers':  self.brokers,
+        options ={
+            'bootstrap.servers':  EventBackboneConfiguration.getBrokerEndPoints(),
             'group.id': group_id,
             'auto.offset.reset': 'earliest',
             'enable.auto.commit': self.kafka_auto_commit,
         }
-        if (self.apikey != ''):
+        if (EventBackboneConfiguration.hasAPIKey()):
             options['security.protocol'] = 'SASL_SSL'
             options['sasl.mechanisms'] = 'PLAIN'
             options['sasl.username'] = 'token'
-            options['sasl.password'] = self.apikey
-        if (self.currentRuntime == 'ICP'):
-            options['ssl.ca.location'] = 'es-cert.pem'
+            options['sasl.password'] = EventBackboneConfiguration.getEndPointAPIKey()
+        if (EventBackboneConfiguration.isEncrypted()):
+            options['ssl.ca.location'] = EventBackboneConfiguration.getKafkaCertificate()
         log.info(options)
         self.consumer = Consumer(options)
-        self.consumer.subscribe([self.topic_name])
+        self.consumer.subscribe([EventBackboneConfiguration.getTelemetryTopicName()])
     
     def traceResponse(self, msg):
         msgStr = msg.value().decode('utf-8')
-        log.info('@@@ pollNextEvent {} partition: [{}] at offset {} with key {}:\n\tvalue: {}'.format(
-            msg.topic(), msg.partition(), msg.offset(), str(msg.key()), msgStr ))
+        log.info('@@@ pollNextEvent {} partition: [{}] at offset {} with key {}:\n\tvalue: {}'
+                 .format(msg.topic(), msg.partition(), msg.offset(), str(msg.key()), msgStr))
         return msgStr
 
     def processEvents(self, callback):

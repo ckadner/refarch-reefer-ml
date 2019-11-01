@@ -22,10 +22,8 @@ except KeyError:
     KAFKA_APIKEY = ""
     log.warning("The KAFKA_APIKEY environment variable not set... assume local deployment")
 
-try:
-    KAFKA_ENV = env['KAFKA_ENV']
-except KeyError:
-    KAFKA_ENV = 'LOCAL'
+
+KAFKA_CERT = env.get('KAFKA_CERT','')
 
 
 def getBrokerEndPoints():
@@ -36,5 +34,21 @@ def getEndPointAPIKey():
     return KAFKA_APIKEY
 
 
-def getCurrentRuntimeEnvironment():
-    return KAFKA_ENV
+def hasAPIKey():
+    return KAFKA_APIKEY != ''
+
+
+def isEncrypted():
+    return KAFKA_CERT != ""
+
+
+def getKafkaCertificate():
+    return KAFKA_CERT
+
+
+def getTelemetryTopicName():
+    return env.get("TELEMETRY_TOPIC", "reeferTelemetries")
+
+
+def getContainerTopicName():
+    return env.get("CONTAINER_TOPIC", "containers")
